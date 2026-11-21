@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6 import uic
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTableWidgetItem, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QTableWidgetItem, QWidget, QStackedWidget
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -21,6 +21,7 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.advance_mock_simulation)
         uic.loadUi(str(BASE_DIR / 'main_window.ui'), self)
+        self.stackedWidget = self.findChild(QStackedWidget)
         self.welcomeLabel.setText(f"Hi, {self.username.capitalize()}!")
         self.pages = {
             'dashboard': self.dashboardPage,
@@ -28,6 +29,7 @@ class MainWindow(QMainWindow):
             'dataset': self.datasetPage,
             'ml': self.mlTrainingPage,
             'reports': self.reportsPage,
+            'faq': self.textEdit.parentWidget(),
         }
         for button, name in (
             (self.dashboardButton, 'dashboard'),
@@ -37,6 +39,7 @@ class MainWindow(QMainWindow):
             (self.reportsButton, 'reports'),
             (self.newSimulationButton, 'simulation'),
             (self.quickTrainButton, 'ml'),
+            (self.faqButton, 'faq'),
         ):
             button.clicked.connect(lambda _checked=False, key=name: self.show_page(key))
         self.logoutButton.clicked.connect(self.logout)
