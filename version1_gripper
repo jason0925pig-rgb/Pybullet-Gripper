@@ -1,309 +1,320 @@
+"""Collect measured PR2/cube grasp trials for a binary classifier."""
+
+import argparse
+import json
+import math
 import time
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import pybullet as p
 import pybullet_data
 
 
+FEATURES = ["x", "y", "z", "roll", "pitch", "yaw"]
+
+
 class PR2Hand:
     GRASP_JOINTS = [0, 2]
+    OPEN_JOINT_POSITIONS = [0.550569, 0.0, 0.549657, 0.0]
+    BOX_POS = np.array([0, 0, 0.025])
+    R_MIN = 0.33
+    R_MAX = 0.6
+    LIFT_H = 0.27
 
-    # ---- 随机云参数 ----
-    BOX_POS = np.array([0, 0, 0.025])   # 方块中心 = 半球球心
-    R_MIN = 0.33                        # 最近半径(= 抓取时爪子到方块的距离)
-    R_MAX = 0.6                         # 最远半径(= 原来的起始高度)
-    LIFT_H = 0.27                       # 上抬高度 0.6 - 0.33
-    CONTACT_T = 3.0                     # 接触超过 3 秒 -> label 1
-
-    def __init__(self, urdf_path="pr2_gripper.urdf", gui=True):
+    def __init__(self, urdf_path="pr2_gripper.urdf", gui=True, seed=None,
+                 hold_seconds=3.1, min_lift=0.1, slip_tolerance=0.02,
+                 rotation_tolerance=0.35):
+        if hold_seconds <= 3.0:
+            raise ValueError("The post-lift hold must exceed three seconds.")
+        if min(min_lift, slip_tolerance, rotation_tolerance) <= 0:
+            raise ValueError("Lift and slip thresholds must be positive.")
         self.urdf_path = urdf_path
+        self.gui = gui
+        self.seed = seed
+        self.rng = np.random.default_rng(seed)
+        self.dt = 1.0 / 240.0
+        self.hold_seconds = hold_seconds
+        self.min_lift = min_lift
+        self.slip_tolerance = slip_tolerance
+        self.rotation_tolerance = rotation_tolerance
+        self.client_id = None
         self.gripper_id = None
-        self.hand_base_constraint = None
-        self.num_joints = 0
-        self.open = True
         self.box_id = None
         self.plane_id = None
-        self.gui = gui
-        self.dt = 1.0 / 240.0
-        # 接触统计
+        self.hand_base_constraint = None
+        self.num_joints = 0
         self.touched = False
-        self.contact_time = 0.0       # 当前连续接触时间
-        self.max_contact_time = 0.0   # 本次尝试中最长连续接触时间
 
-    # -------------------------------
-    # Finger Control
-    # -------------------------------
     def grasp(self):
-        """Close PR2 gripper."""
-        for i in [0, 2]:
+        """Command the two actuated finger joints to close."""
+        for joint in self.GRASP_JOINTS:
             p.setJointMotorControl2(
-                self.gripper_id, i, p.POSITION_CONTROL,
-                targetPosition=0.0, maxVelocity=1, force=10
-            )
-        self.open = False
+                self.gripper_id, joint, p.POSITION_CONTROL,
+                targetPosition=0.0, maxVelocity=1, force=10,
+                physicsClientId=self.client_id)
 
     def open_gripper(self):
-        """Open PR2 gripper."""
-        for i in [0, 2]:
+        for joint in self.GRASP_JOINTS:
             p.setJointMotorControl2(
-                self.gripper_id, i, p.POSITION_CONTROL,
-                targetPosition=0.54, maxVelocity=1, force=10
-            )
-        self.open = True
+                self.gripper_id, joint, p.POSITION_CONTROL,
+                targetPosition=0.54, maxVelocity=1, force=10,
+                physicsClientId=self.client_id)
 
-    # -------------------------------
-    # Setup and Initialization
-    # -------------------------------
     def connect(self):
-        if self.gui:
-            cid = p.connect(p.SHARED_MEMORY)
-            if cid < 0:
-                p.connect(p.GUI)
-        else:
-            p.connect(p.DIRECT)
-
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        #-------------------------------------相机高度初始化
-        p.resetDebugVisualizerCamera(
-            cameraDistance=1.2,   # 半球半径最大 0.6,相机拉远一点
-            cameraYaw=45,
-            cameraPitch=-30,
-            cameraTargetPosition=[0, 0, 0.3]
-        )
-        #-------------------------------------目标高度？
-        #-------------------------------------改5.6后爪子上下跳窜确认为爪子高度
+        """Create a private physics world rather than reusing shared memory."""
+        if self.client_id is not None:
+            raise RuntimeError("The simulator is already connected.")
+        self.client_id = p.connect(p.GUI if self.gui else p.DIRECT)
+        if self.client_id < 0:
+            self.client_id = None
+            raise RuntimeError("Could not connect to PyBullet.")
+        cid = self.client_id
+        p.setAdditionalSearchPath(pybullet_data.getDataPath(), physicsClientId=cid)
+        p.setGravity(0, 0, -9.81, physicsClientId=cid)
+        p.setTimeStep(self.dt, physicsClientId=cid)
+        p.setRealTimeSimulation(0, physicsClientId=cid)
+        self.plane_id = p.loadURDF("plane.urdf", physicsClientId=cid)
         init_pos = [0, 0, 0.6]
-        #-------------------------------------爪子角度
-        #-------------------------------------尝试np.pi / 3 后爪子更改角度
         init_ori = p.getQuaternionFromEuler([0, np.pi / 2, 0])
-
-        # 重力 + 地面(否则方块悬空,抓取/摩擦没有意义)
-        p.setGravity(0, 0, -9.81)
-        p.setTimeStep(self.dt)
-        self.plane_id = p.loadURDF("plane.urdf")
-
         self.gripper_id = p.loadURDF(
-            self.urdf_path, init_pos, init_ori,
-            globalScaling=1, useFixedBase=False
-        )
-
-        self.num_joints = p.getNumJoints(self.gripper_id)
-
-        #joint_positions = [0.550569, 0.0, 0.549657, 0.0]
-        #-------------------------------------盲猜爪子开合joint坐标，改[10, 0.0, 10, 0.0]后发现相反打开且劈叉
-        #-------------------------------------这里全改10
-        joint_positions = [0.550569, 0.0, 0.549657, 0.0]
-        for i, pos in enumerate(joint_positions):
-            p.resetJointState(self.gripper_id, i, pos)
-
-        for i in range(self.num_joints):
-            info = p.getJointInfo(self.gripper_id, i)
-            print(
-                i,
-                info[1].decode(),
-                "lower =", info[8],
-                "upper =", info[9]
-            )
-
-        # Cube exists from the beginning
+            self.urdf_path, init_pos, init_ori, useFixedBase=False,
+            physicsClientId=cid)
+        self.num_joints = p.getNumJoints(self.gripper_id, physicsClientId=cid)
         self.box_id = p.loadURDF(
-            "cube_small.urdf",
-            self.BOX_POS.tolist(),
-            globalScaling=1
-        )
-
-        # 摩擦系数(不设置容易打滑)
-        p.changeDynamics(self.box_id, -1, lateralFriction=1.0)
-        for j in range(-1, self.num_joints):
-            p.changeDynamics(self.gripper_id, j, lateralFriction=1.0)
-
-        # 用 stepSimulation 手动推进,保证每次尝试可复现
-        p.setRealTimeSimulation(0)
-
+            "cube_small.urdf", self.BOX_POS.tolist(), physicsClientId=cid)
+        p.changeDynamics(self.box_id, -1, lateralFriction=1.0, physicsClientId=cid)
+        for joint in range(-1, self.num_joints):
+            p.changeDynamics(self.gripper_id, joint, lateralFriction=1.0,
+                             physicsClientId=cid)
         self.hand_base_constraint = p.createConstraint(
-            self.gripper_id, -1, -1, -1,
-            p.JOINT_FIXED,
-            [0, 0, 0],
-            [0, 0, 0],
-            init_pos,
-            childFrameOrientation=init_ori
-        )
+            self.gripper_id, -1, -1, -1, p.JOINT_FIXED,
+            [0, 0, 0], [0, 0, 0], init_pos,
+            childFrameOrientation=init_ori, physicsClientId=cid)
+        self.reset_trial(init_pos, init_ori)
+        if self.gui:
+            p.resetDebugVisualizerCamera(
+                cameraDistance=1.2, cameraYaw=45, cameraPitch=-30,
+                cameraTargetPosition=[0, 0, 0.3], physicsClientId=cid)
 
-        p.changeConstraint(
-                    self.hand_base_constraint,
-                    init_pos,
-                    jointChildFrameOrientation=init_ori,
-                    maxForce=50
-                )
+    def disconnect(self):
+        if self.client_id is not None:
+            if p.isConnected(self.client_id):
+                p.disconnect(self.client_id)
+            self.client_id = None
 
-        print("Gripper loaded with ID:", self.gripper_id)
-
-    # -------------------------------
-    # Random Pose Cloud
-    # -------------------------------
     def sample_pose(self):
-        """在方块上半球壳 (R_MIN~R_MAX) 内随机取点,姿态对准方块。
-        返回 pos, (yaw, roll, pitch)"""
-        r = np.random.uniform(self.R_MIN ** 3, self.R_MAX ** 3) ** (1.0 / 3.0)  # 体积均匀
-        phi = np.random.uniform(0, 2 * np.pi)
-        cos_t = np.random.uniform(0, 1)          # 只取上半球(下面除外)
-        sin_t = np.sqrt(1 - cos_t ** 2)
-        direction = np.array([sin_t * np.cos(phi), sin_t * np.sin(phi), cos_t])  # 方块 -> 爪子
-        pos = self.BOX_POS + r * direction
+        """Sample an approach pose uniformly in the original hemisphere shell.
 
-        # 爪子接近轴 = 夹爪局部 +x (原来 pitch=pi/2 时 x 轴指向 -z)
-        # 让 +x 轴指向方块: d = -direction
+        Preserve the original return order: position, (yaw, roll, pitch).
+        """
+        r = self.rng.uniform(self.R_MIN ** 3, self.R_MAX ** 3) ** (1.0 / 3.0)
+        phi = self.rng.uniform(0, 2 * np.pi)
+        cos_t = self.rng.uniform(0, 1)
+        sin_t = np.sqrt(1 - cos_t ** 2)
+        direction = np.array([sin_t * np.cos(phi), sin_t * np.sin(phi), cos_t])
+        pos = self.BOX_POS + r * direction
         d = -direction
         yaw = np.arctan2(d[1], d[0])
         pitch = np.arctan2(-d[2], np.hypot(d[0], d[1]))
-        roll = np.random.uniform(-np.pi, np.pi)  # 绕接近轴自转,不改变"对准"
+        roll = self.rng.uniform(-np.pi, np.pi)
         return pos, (yaw, roll, pitch)
 
-    def reset_trial(self, pos, ori):
-        """不重新加载模型,直接把爪子/方块复位到新一次尝试的状态"""
+    def move_to(self, pos, ori):
         p.changeConstraint(
-            self.hand_base_constraint,
-            pos,
-            jointChildFrameOrientation=ori,
-            maxForce=50
-        )
-        p.resetBasePositionAndOrientation(self.gripper_id, pos, ori)
-        p.resetBaseVelocity(self.gripper_id, [0, 0, 0], [0, 0, 0])
-        for i, jp in enumerate([0.550569, 0.0, 0.549657, 0.0]):
-            p.resetJointState(self.gripper_id, i, jp, targetVelocity=0)
+            self.hand_base_constraint, pos, jointChildFrameOrientation=ori,
+            maxForce=50, physicsClientId=self.client_id)
 
-        p.resetBasePositionAndOrientation(self.box_id, self.BOX_POS.tolist(), [0, 0, 0, 1])
-        p.resetBaseVelocity(self.box_id, [0, 0, 0], [0, 0, 0])
-
+    def reset_trial(self, pos, ori):
+        self.move_to(pos, ori)
+        cid = self.client_id
+        p.resetBasePositionAndOrientation(self.gripper_id, pos, ori, physicsClientId=cid)
+        p.resetBaseVelocity(self.gripper_id, [0, 0, 0], [0, 0, 0], physicsClientId=cid)
+        for joint, angle in enumerate(self.OPEN_JOINT_POSITIONS):
+            p.resetJointState(self.gripper_id, joint, angle, targetVelocity=0,
+                             physicsClientId=cid)
+        self.open_gripper()
+        p.resetBasePositionAndOrientation(
+            self.box_id, self.BOX_POS.tolist(), [0, 0, 0, 1], physicsClientId=cid)
+        p.resetBaseVelocity(self.box_id, [0, 0, 0], [0, 0, 0], physicsClientId=cid)
         self.touched = False
-        self.contact_time = 0.0
-        self.max_contact_time = 0.0
 
     def is_overlapping(self, margin=0.01):
-        """生成后是否与方块(或地面)重叠"""
-        p.performCollisionDetection()
-        hit_box = p.getClosestPoints(self.gripper_id, self.box_id, margin)
-        hit_plane = p.getClosestPoints(self.gripper_id, self.plane_id, 0.0)
-        return len(hit_box) > 0 or len(hit_plane) > 0
+        """Reject initial poses within the cube clearance or touching the floor."""
+        cid = self.client_id
+        p.performCollisionDetection(physicsClientId=cid)
+        return bool(
+            p.getClosestPoints(self.gripper_id, self.box_id, margin, physicsClientId=cid)
+            or p.getClosestPoints(self.gripper_id, self.plane_id, 0.0, physicsClientId=cid))
 
     def step_sim(self):
-        """推进一步仿真,并统计爪子与方块的接触"""
-        p.stepSimulation()
+        p.stepSimulation(physicsClientId=self.client_id)
         if self.gui:
             time.sleep(self.dt)
+        self.touched |= bool(p.getContactPoints(
+            self.gripper_id, self.box_id, physicsClientId=self.client_id))
 
-        contacts = p.getContactPoints(bodyA=self.gripper_id, bodyB=self.box_id)
-        if len(contacts) > 0:
-            self.touched = True
-            self.contact_time += self.dt
-            self.max_contact_time = max(self.max_contact_time, self.contact_time)
-        else:
-            self.contact_time = 0.0
+    def wait(self, seconds):
+        for _ in range(math.ceil(seconds / self.dt)):
+            self.step_sim()
 
-    def get_label(self):
-        if self.max_contact_time > self.CONTACT_T:
-            return 1
-        if self.touched:
-            return 0.5
-        return 0
+    def relative_pose(self, body, reference):
+        """Return the measured base COM pose expressed in the reference COM frame."""
+        body_pos, body_ori = p.getBasePositionAndOrientation(
+            body, physicsClientId=self.client_id)
+        ref_pos, ref_ori = p.getBasePositionAndOrientation(
+            reference, physicsClientId=self.client_id)
+        inv_pos, inv_ori = p.invertTransform(ref_pos, ref_ori)
+        return p.multiplyTransforms(inv_pos, inv_ori, body_pos, body_ori)
 
-    # -------------------------------
-    # Demo Script
-    # -------------------------------
-    def run_demo(self, n_samples=100):
-        self.connect()
+    def evaluate_hold(self, initial_box_z):
+        """Require lift, contact and bounded slip throughout the post-lift window.
 
-        # Visualize world axes
-        if self.gui:
-            p.addUserDebugLine([0, 0, 0], [0.5, 0, 0], [1, 0, 0], 1, 0)
-            p.addUserDebugLine([0, 0, 0], [0, 0.5, 0], [0, 1, 0], 1, 0)
-            p.addUserDebugLine([0, 0, 0], [0, 0, 0.5], [0, 0, 1], 1, 0)
-
-        time.sleep(0.5)
-
-        count = 0
-        while count < n_samples:
-            # 随机生成爪子位姿(yaw / roll / pitch,对准方块)
-            pos, (yaw, roll, pitch) = self.sample_pose()
-            hand_ori = p.getQuaternionFromEuler([roll, pitch, yaw])
-
-            self.reset_trial(pos, hand_ori)
-            if self.is_overlapping():
-                continue  # 与方块重叠,重新生成
-
-            # -------------------------------
-            # Step 1: Open
-            # -------------------------------
-            self.open_gripper()
-            for _ in range(int(1.0 / self.dt)):
-                self.step_sim()
-
-            # -------------------------------
-            # Step 2: Slowly move toward the cube (沿对准方向靠近到 R_MIN)
-            # -------------------------------
-            start_pos = np.array(pos)
-            r = np.linalg.norm(start_pos - self.BOX_POS)
-            grasp_pos = self.BOX_POS + (start_pos - self.BOX_POS) / r * self.R_MIN
-            steps_down = 200
-
-            for interp_pos in np.linspace(start_pos, grasp_pos, steps_down):
-
-                # Keep open during descent
-                self.open_gripper()
-
-                p.changeConstraint(
-                    self.hand_base_constraint,
-                    interp_pos,
-                    jointChildFrameOrientation=hand_ori,
-                    maxForce=50
-                )
-
-                self.step_sim()
-
-            # -------------------------------
-            # Step 3: Close
-            # -------------------------------
-            self.grasp()
-            for _ in range(int(1.5 / self.dt)):
-                self.step_sim()
-
-            # -------------------------------
-            # Step 4: Lift (世界坐标系竖直上抬)
-            # -------------------------------
-            end_pos = grasp_pos + np.array([0, 0, self.LIFT_H])
-            steps = 480   # 2 秒仿真时间,保证 3 秒接触阈值可达
-
-            for interp_pos in np.linspace(grasp_pos, end_pos, steps):
-
-                # Keep closed during lift
+        Thresholds are engineering choices, not values specified by the coursework.
+        """
+        reference_pos, reference_ori = self.relative_pose(self.box_id, self.gripper_id)
+        min_height = float("inf")
+        max_slip = 0.0
+        max_rotation = 0.0
+        stable_steps = 0
+        failure = ""
+        for index in range(math.ceil(self.hold_seconds / self.dt) + 1):
+            if index:
                 self.grasp()
-
-                p.changeConstraint(
-                    self.hand_base_constraint,
-                    interp_pos,
-                    jointChildFrameOrientation=hand_ori,
-                    maxForce=50
-                )
-
                 self.step_sim()
+            box_pos, _ = p.getBasePositionAndOrientation(
+                self.box_id, physicsClientId=self.client_id)
+            rel_pos, rel_ori = self.relative_pose(self.box_id, self.gripper_id)
+            slip = float(np.linalg.norm(np.array(rel_pos) - reference_pos))
+            dot = abs(float(np.dot(rel_ori, reference_ori)))
+            rotation = 2 * math.acos(float(np.clip(dot, 0.0, 1.0)))
+            min_height = min(min_height, box_pos[2])
+            max_slip = max(max_slip, slip)
+            max_rotation = max(max_rotation, rotation)
+            if box_pos[2] - initial_box_z < self.min_lift:
+                failure = "insufficient_lift"
+            elif p.getContactPoints(self.box_id, self.plane_id,
+                                    physicsClientId=self.client_id):
+                failure = "floor_contact"
+            elif not p.getContactPoints(self.gripper_id, self.box_id,
+                                        physicsClientId=self.client_id):
+                failure = "lost_gripper_contact"
+            elif slip > self.slip_tolerance or rotation > self.rotation_tolerance:
+                failure = "excessive_slip"
+            if failure:
+                break
+            if index:
+                stable_steps += 1
+        return {
+            "success": int(not failure),
+            "failure_reason": failure,
+            "stable_hold_seconds": stable_steps * self.dt,
+            "min_hold_height": min_height,
+            "max_relative_slip": max_slip,
+            "max_relative_rotation": max_rotation,
+        }
 
-            # 上抬完再保持 1 秒,观察方块是否掉落
-            for _ in range(int(1.0 / self.dt)):
-                self.step_sim()
+    def run_trial(self, pos, ori):
+        """Run a reset candidate; measure features after approach, before closing."""
+        self.wait(1.0)
+        initial_box_z = p.getBasePositionAndOrientation(
+            self.box_id, physicsClientId=self.client_id)[0][2]
+        start_pos = np.asarray(pos, dtype=float)
+        direction = start_pos - self.BOX_POS
+        grasp_pos = self.BOX_POS + direction / np.linalg.norm(direction) * self.R_MIN
+        for target in np.linspace(start_pos, grasp_pos, 200):
+            self.open_gripper()
+            self.move_to(target, ori)
+            self.step_sim()
+        self.wait(0.25)
+        rel_pos, rel_ori = self.relative_pose(self.gripper_id, self.box_id)
+        features = list(rel_pos) + list(p.getEulerFromQuaternion(rel_ori))
+        self.grasp()
+        self.wait(1.5)
+        end_pos = grasp_pos + np.array([0, 0, self.LIFT_H])
+        for target in np.linspace(grasp_pos, end_pos, 480):
+            self.grasp()
+            self.move_to(target, ori)
+            self.step_sim()
+        record = dict(zip(FEATURES, features))
+        record.update({"planned_grasp_x": float(grasp_pos[0]),
+                       "planned_grasp_y": float(grasp_pos[1]),
+                       "planned_grasp_z": float(grasp_pos[2]),
+                       "initial_box_height": initial_box_z})
+        record.update(self.evaluate_hold(initial_box_z))
+        record["touched"] = self.touched
+        return record
 
-            # -------------------------------
-            # Output: x | y | z | yaw | roll | pitch | label
-            # -------------------------------
-            label = self.get_label()
-            print(
-                f"x: {pos[0]:.4f} | y: {pos[1]:.4f} | z: {pos[2]:.4f} | "
-                f"yaw: {yaw:.4f} | roll: {roll:.4f} | pitch: {pitch:.4f} | "
-                f"label: {label}"
-            )
-            count += 1
-
-        p.disconnect()
+    def run_demo(self, n_samples=100, output_dir="output/grasp_demo", max_attempts=None):
+        """Save all attempts separately from valid classifier rows; return a DataFrame."""
+        if n_samples < 1:
+            raise ValueError("n_samples must be positive.")
+        max_attempts = max_attempts if max_attempts is not None else n_samples * 20
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be positive.")
+        output = Path(output_dir)
+        output.mkdir(parents=True, exist_ok=True)
+        records = []
+        attempts = []
+        config = {"seed": self.seed, "dt": self.dt, "gripper": self.urdf_path,
+                  "object": "cube_small.urdf", "r_min": self.R_MIN, "r_max": self.R_MAX,
+                  "lift_height": self.LIFT_H, "hold_seconds": self.hold_seconds,
+                  "min_lift": self.min_lift, "slip_tolerance": self.slip_tolerance,
+                  "rotation_tolerance": self.rotation_tolerance,
+                  "feature_frame": "gripper base COM relative to object base COM",
+                  "measurement_time": "after approach settling, before finger closure",
+                  "position_units": "meters", "angle_units": "radians",
+                  "euler_order": "roll,pitch,yaw", "n_samples": n_samples,
+                  "max_attempts": max_attempts}
+        (output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
+        try:
+            self.connect()
+            for attempt_id in range(1, max_attempts + 1):
+                pos, (yaw, roll, pitch) = self.sample_pose()
+                ori = p.getQuaternionFromEuler([roll, pitch, yaw])
+                audit = {"attempt_id": attempt_id, "gripper": "PR2", "object": "cube_small",
+                         "planned_approach_x": float(pos[0]),
+                         "planned_approach_y": float(pos[1]),
+                         "planned_approach_z": float(pos[2]),
+                         "planned_roll": float(roll), "planned_pitch": float(pitch),
+                         "planned_yaw": float(yaw)}
+                try:
+                    self.reset_trial(pos, ori)
+                    if self.is_overlapping():
+                        audit["run_status"] = "rejected_initial_collision"
+                    else:
+                        record = self.run_trial(pos, ori)
+                        audit.update(record, run_status="completed")
+                        records.append(record)
+                        print(f"Trial {len(records)}/{n_samples}: success={record['success']} "
+                              f"reason={record['failure_reason'] or 'stable_hold'}", flush=True)
+                except (p.error, ValueError, RuntimeError) as exc:
+                    audit.update(run_status="error", error=str(exc))
+                    print(f"Attempt {attempt_id} failed: {exc}", flush=True)
+                attempts.append(audit)
+                if len(records) >= n_samples:
+                    break
+        finally:
+            self.disconnect()
+            dataset = pd.DataFrame(records, columns=FEATURES + ["success"])
+            dataset.to_csv(output / "grasps.csv", index=False)
+            pd.DataFrame(attempts).to_csv(output / "attempts.csv", index=False)
+        if len(records) < n_samples:
+            print(f"Attempt limit reached: collected {len(records)}/{n_samples} valid trials.",
+                  flush=True)
+        print(f"Saved {len(dataset)} rows to {output / 'grasps.csv'}; "
+              f"class counts: {dataset['success'].value_counts().to_dict()}", flush=True)
+        return dataset
 
 
 if __name__ == "__main__":
-    hand = PR2Hand(gui=True)   # 批量采数据时改成 gui=False,速度快很多
-    hand.run_demo(n_samples=100)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--direct", action="store_true", help="Run without a GUI window.")
+    parser.add_argument("--samples", type=int, default=100)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--output", default="output/grasp_demo")
+    parser.add_argument("--max-attempts", type=int, default=None)
+    args = parser.parse_args()
+    hand = PR2Hand(gui=not args.direct, seed=args.seed)
+    hand.run_demo(args.samples, args.output, args.max_attempts)
