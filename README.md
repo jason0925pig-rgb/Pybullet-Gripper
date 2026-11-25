@@ -36,6 +36,19 @@ See the [simulation and pose data guide](ML_DATA_COLLECTION.md) for details.
 python version1_gripper --direct --samples 5 --seed 42 --output output/quick_start_recheck
 ```
 
+**Replay 10 model predictions.** This loads the saved logistic regression
+model and repeats the recorded seed-9001 test. The terminal shows the predicted
+and actual outcome for each grasp. Expect 10 valid attempts and 8 correct
+predictions in the tested environment. Use a fresh output directory if you
+repeat the command.
+
+```bash
+python run_independent_test.py --samples 10 --seed 9001 --output output/quick_prediction_recheck
+```
+
+Open `output/quick_prediction_recheck/test_predictions.csv` for each pose and
+its prediction. See `test_summary.json` in the same directory for accuracy.
+
 ## First-round ML workflow
 
 Start here if you are onboarding to the ML work. The arrows show how the
