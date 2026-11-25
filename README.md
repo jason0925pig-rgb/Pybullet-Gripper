@@ -36,22 +36,47 @@ See the [simulation and pose data guide](ML_DATA_COLLECTION.md) for details.
 python version1_gripper --direct --samples 5 --seed 42 --output output/quick_start_recheck
 ```
 
-## Where to work
+## How the files fit together
 
-| Task | Entry point |
+The arrows show the flow of data and saved models through the command-line demo.
+
+```mermaid
+flowchart TD
+    collect["version1_gripper — Sample and simulate grasps"]
+    prepare["prepare_dataset.py — Verify and balance the records"]
+    baseline["train_baseline.py — Freeze the split and train baselines"]
+    tune["tune_models.py — Compare settings and save selected models"]
+    encode["compare_pose_features.py — Compare raw angles and sin/cos"]
+    pipeline["train_pose_pipeline.py — Save the sin/cos model pipeline"]
+    validate["evaluate_selected.py — Score a saved model on validation rows"]
+    test["run_independent_test.py — Predict and execute new grasps"]
+
+    collect -->|"Labeled poses"| prepare
+    prepare -->|"Balanced data"| baseline
+    baseline -->|"Frozen split"| tune
+    tune -->|"Saved CV results"| encode
+    encode -->|"Feature comparison"| pipeline
+    tune --> validate
+    pipeline --> validate
+    tune --> test
+    pipeline --> test
+```
+
+`run_independent_test.py` reuses the simulator in `version1_gripper`.
+It predicts before finger closure and scores the prediction after the lift.
+
+| Supporting file | Role |
 | --- | --- |
-| Sample and execute PR2 grasps | [version1_gripper](version1_gripper) |
-| Verify and balance recorded poses | [prepare_dataset.py](prepare_dataset.py) |
-| Make the frozen split and compare classifiers | [train_baseline.py](train_baseline.py), [tune_models.py](tune_models.py) |
-| Explore errors and training set size | [diagnose_models.py](diagnose_models.py), [plot_learning_curves.py](plot_learning_curves.py) |
-| Compare pose features and save the selected pipeline | [compare_pose_features.py](compare_pose_features.py), [train_pose_pipeline.py](train_pose_pipeline.py) |
-| Score saved models on validation rows or new grasps | [evaluate_selected.py](evaluate_selected.py), [run_independent_test.py](run_independent_test.py) |
+| [inspect_dataset.py](inspect_dataset.py) | Checks the pose CSV and labels before training. |
+| [diagnose_models.py](diagnose_models.py) | Analyzes training errors and provides shared experiment settings for the analysis scripts and Pipeline training. |
+| [plot_learning_curves.py](plot_learning_curves.py) | Shows how scores change with training set size. |
+| [record_grasp_demo.py](record_grasp_demo.py) | Records simulated grasps for visual inspection. |
+| [artifact_paths.py](artifact_paths.py) | Resolves experiment files and computes their verification hashes. |
+| [main.py](main.py) and the `.ui` files | Run and lay out the separate PyQt mock interface. |
 
 Run the automated checks with `python -m unittest discover -s tests`. The
 [coursework brief](OOP%20-%20Final%20CW%20Description2026.pdf) describes the full assignment.
 
-The default dataset, split and model search directories shared by the
-diagnostics, learning curves and pipeline training are in `diagnose_models.py`.
 When editing pose encoding, train and save a new pipeline. The existing
 sine/cosine bundle references `compare_pose_features.encode_angles` and the
 independent runner verifies that module against the saved hash.
