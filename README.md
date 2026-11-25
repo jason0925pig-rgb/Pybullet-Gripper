@@ -36,9 +36,10 @@ See the [simulation and pose data guide](ML_DATA_COLLECTION.md) for details.
 python version1_gripper --direct --samples 5 --seed 42 --output output/quick_start_recheck
 ```
 
-## How the files fit together
+## First-round ML workflow
 
-The arrows show the flow of data and saved models through the command-line demo.
+Start here if you are onboarding to the ML work. The arrows show how the
+main scripts pass data and saved models through the command-line demo.
 
 ```mermaid
 flowchart TD
@@ -46,37 +47,43 @@ flowchart TD
     prepare["prepare_dataset.py — Verify and balance the records"]
     baseline["train_baseline.py — Freeze the split and train baselines"]
     tune["tune_models.py — Compare settings and save selected models"]
-    encode["compare_pose_features.py — Compare raw angles and sin/cos"]
-    pipeline["train_pose_pipeline.py — Save the sin/cos model pipeline"]
     validate["evaluate_selected.py — Score a saved model on validation rows"]
     test["run_independent_test.py — Predict and execute new grasps"]
 
     collect -->|"Labeled poses"| prepare
     prepare -->|"Balanced data"| baseline
     baseline -->|"Frozen split"| tune
-    tune -->|"Saved CV results"| encode
-    encode -->|"Feature comparison"| pipeline
     tune --> validate
-    pipeline --> validate
     tune --> test
-    pipeline --> test
 ```
 
 `run_independent_test.py` reuses the simulator in `version1_gripper`.
 It predicts before finger closure and scores the prediction after the lift.
 
-| Supporting file | Role |
+If your task is to **use the current results**, start with the
+[balanced dataset](output/dev_pr2_cube_v1_balanced240/development.csv) and the
+[comparison results](output/independent_comparison_pr2_cube_v1_seed9002/test_summary.json).
+Read the training scripts when you need to retrain, check the split, or change
+the model settings.
+
+## Supporting ML files
+
+These scripts explain or extend the first-round experiments. The raw-pose
+workflow above can run without reproducing these experiments.
+
+| File | When to open it |
 | --- | --- |
-| [inspect_dataset.py](inspect_dataset.py) | Checks the pose CSV and labels before training. |
-| [diagnose_models.py](diagnose_models.py) | Analyzes training errors and provides shared experiment settings for the analysis scripts and Pipeline training. |
-| [plot_learning_curves.py](plot_learning_curves.py) | Shows how scores change with training set size. |
-| [record_grasp_demo.py](record_grasp_demo.py) | Records simulated grasps for visual inspection. |
-| [artifact_paths.py](artifact_paths.py) | Resolves experiment files and computes their verification hashes. |
-| [main.py](main.py) and the `.ui` files | Run and lay out the separate PyQt mock interface. |
+| [diagnose_models.py](diagnose_models.py) | Check which poses the models misclassified. This module also provides shared experiment settings for the analysis scripts and pipeline training. |
+| [plot_learning_curves.py](plot_learning_curves.py) | Check how scores changed with the number of training samples. |
+| [compare_pose_features.py](compare_pose_features.py), [train_pose_pipeline.py](train_pose_pipeline.py) | Reproduce the raw-angle vs. sin/cos experiment or train a new sin/cos pipeline. The saved sin/cos model uses `encode_angles` from the comparison module at prediction time. |
 
-Run the automated checks with `python -m unittest discover -s tests`. The
-[coursework brief](OOP%20-%20Final%20CW%20Description2026.pdf) describes the full assignment.
+## Shared checks and other team files
 
-When editing pose encoding, train and save a new pipeline. The existing
-sine/cosine bundle references `compare_pose_features.encode_angles` and the
-independent runner verifies that module against the saved hash.
+| File or folder | Role |
+| --- | --- |
+| [inspect_dataset.py](inspect_dataset.py), [artifact_paths.py](artifact_paths.py) | Shared checks for pose CSVs, experiment paths and file hashes. |
+| [tests/](tests/) | Automated checks for the simulator and ML workflow. Run with `python -m unittest discover -s tests`. |
+| [output/](output/) | Recorded data, saved models and experiment results. Follow the [experiment report](docs/ML_EXPERIMENT_REPORT.md) to find the files for a specific run. |
+| [record_grasp_demo.py](record_grasp_demo.py) | Records simulated grasps for visual review. |
+| [main.py](main.py), [login.ui](login.ui), [main_window.ui](main_window.ui) | The separate PyQt mock interface. Start here for GUI work. |
+| [Coursework brief](OOP%20-%20Final%20CW%20Description2026.pdf) | The full assignment, including GUI integration and coverage beyond PR2/cube. |
