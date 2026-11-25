@@ -1,0 +1,9 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+output/*_recheck/
+output/diagnostics_pr2_cube_v1/
+output/learning_curves_pr2_cube_v1/
+output/recorded_seed42*/
+output/visual_check_seed42/

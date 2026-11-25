@@ -1,0 +1,20 @@
+{
+  "seed": 1004,
+  "dt": 0.004166666666666667,
+  "gripper": "pr2_gripper.urdf",
+  "object": "cube_small.urdf",
+  "r_min": 0.33,
+  "r_max": 0.6,
+  "lift_height": 0.27,
+  "hold_seconds": 3.1,
+  "min_lift": 0.1,
+  "slip_tolerance": 0.02,
+  "rotation_tolerance": 0.35,
+  "feature_frame": "gripper base COM relative to object base COM",
+  "measurement_time": "after approach settling, before finger closure",
+  "position_units": "meters",
+  "angle_units": "radians",
+  "euler_order": "roll,pitch,yaw",
+  "n_samples": 100,
+  "max_attempts": 2000
+}

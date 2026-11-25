@@ -1,0 +1,51 @@
+{
+  "selected_candidate": "sincos_forest_depth_2",
+  "selection_basis": "highest mean repeated-CV accuracy across the six recorded representation/model combinations",
+  "selected_mean_cv_accuracy": 0.7560323886639676,
+  "training_rows": 192,
+  "excluded_outer_validation_rows": 48,
+  "outer_validation_evaluated": false,
+  "independent_test_performed": false,
+  "input_columns": [
+    "x",
+    "y",
+    "z",
+    "roll",
+    "pitch",
+    "yaw"
+  ],
+  "internal_columns": [
+    "x",
+    "y",
+    "z",
+    "roll_sin",
+    "roll_cos",
+    "pitch_sin",
+    "pitch_cos",
+    "yaw_sin",
+    "yaw_cos"
+  ],
+  "classifier_parameters": {
+    "bootstrap": true,
+    "ccp_alpha": 0.0,
+    "class_weight": null,
+    "criterion": "gini",
+    "max_depth": 2,
+    "max_features": "sqrt",
+    "max_leaf_nodes": null,
+    "max_samples": null,
+    "min_impurity_decrease": 0.0,
+    "min_samples_leaf": 5,
+    "min_samples_split": 2,
+    "min_weight_fraction_leaf": 0.0,
+    "monotonic_cst": null,
+    "n_estimators": 100,
+    "n_jobs": 1,
+    "oob_score": false,
+    "random_state": 42,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "refit_scope": "original 192 training rows only",
+  "warning": "Feature/model selection reuses development data; CV score is not an independent final performance estimate."
+}

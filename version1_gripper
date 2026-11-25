@@ -215,8 +215,8 @@ class PR2Hand:
             "max_relative_rotation": max_rotation,
         }
 
-    def run_trial(self, pos, ori):
-        """Run a reset candidate; measure features after approach, before closing."""
+    def run_trial(self, pos, ori, on_pose_measured=None):
+        """Measure before closure; optionally notify a predictor before acting."""
         self.wait(1.0)
         initial_box_z = p.getBasePositionAndOrientation(
             self.box_id, physicsClientId=self.client_id)[0][2]
@@ -230,6 +230,8 @@ class PR2Hand:
         self.wait(0.25)
         rel_pos, rel_ori = self.relative_pose(self.gripper_id, self.box_id)
         features = list(rel_pos) + list(p.getEulerFromQuaternion(rel_ori))
+        if on_pose_measured is not None:
+            on_pose_measured(dict(zip(FEATURES, features)))
         self.grasp()
         self.wait(1.5)
         end_pos = grasp_pos + np.array([0, 0, self.LIFT_H])

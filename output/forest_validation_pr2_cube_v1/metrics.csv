@@ -1,0 +1,2 @@
+model,accuracy,success_precision,success_recall,success_f1,tn,fp,fn,tp
+forest_depth_2,0.5833333333333334,0.6111111111111112,0.4583333333333333,0.5238095238095238,17,7,13,11

@@ -1,0 +1,27 @@
+{
+  "run_id": "dev_pr2_cube_v1_b03_seed1003",
+  "collector_commit": "f685efc00aa624f6e1a10507927ef810bc44d9f1",
+  "collector_sha256": "52c01e7e222620f7f8edbce9ec36d38cb41ffb7cb125da0dc22864420bc94cf8",
+  "python": "3.9.20 | packaged by conda-forge | (main, Sep 30 2024, 17:48:00) \n[Clang 17.0.6 ]",
+  "platform": "macOS-15.7.4-arm64-arm-64bit",
+  "packages": {
+    "numpy": "2.0.2",
+    "pandas": "2.3.1",
+    "pybullet": "3.2.5"
+  },
+  "command": [
+    "python",
+    "version1_gripper",
+    "--direct",
+    "--samples",
+    "100",
+    "--seed",
+    "1003",
+    "--max-attempts",
+    "2000",
+    "--output",
+    "output/dev_pr2_cube_v1_b03_seed1003"
+  ],
+  "exit_code": 0,
+  "wall_seconds": 3.582816791
+}

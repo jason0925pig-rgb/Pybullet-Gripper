@@ -1,0 +1,41 @@
+{
+  "cohort_id": "dev_pr2_cube_v1",
+  "pairing": "PR2/cube_small",
+  "runs": [
+    {
+      "run_id": "dev_pr2_cube_v1_b01_seed1001",
+      "manifest": "output/dev_pr2_cube_v1_b01_seed1001/collection_manifest.json",
+      "manifest_sha256": "6275726c04942b2a92c35c1a08a6713277e869cf6dbd7026c6ffe4768306b60c"
+    },
+    {
+      "run_id": "dev_pr2_cube_v1_b02_seed1002",
+      "manifest": "output/dev_pr2_cube_v1_b02_seed1002/collection_manifest.json",
+      "manifest_sha256": "be578598a966fb789aef751bd8f072e0f6404bcc74a6093d18c4d74e6d8384ca"
+    },
+    {
+      "run_id": "dev_pr2_cube_v1_b03_seed1003",
+      "manifest": "output/dev_pr2_cube_v1_b03_seed1003/collection_manifest.json",
+      "manifest_sha256": "1e83f685c599165e6f442e1af6871314d39168edbef8168e3d424d276d2f3bfc"
+    },
+    {
+      "run_id": "dev_pr2_cube_v1_b04_seed1004",
+      "manifest": "output/dev_pr2_cube_v1_b04_seed1004/collection_manifest.json",
+      "manifest_sha256": "280e9cd4edb59d3d92c815353274870e613a037492756c70d30925ebf2dffd6a"
+    }
+  ],
+  "completed_trials": 400,
+  "class_counts": {
+    "0": 270,
+    "1": 130
+  },
+  "exact_feature_duplicates": 0,
+  "pilot_excluded": true,
+  "provisional_target_per_class": 120,
+  "remaining": {
+    "0": 0,
+    "1": 0
+  },
+  "ready_for_stage2_3_for_this_pairing": true,
+  "balanced_dataset_created": false,
+  "model_trained": false
+}

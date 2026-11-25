@@ -1,0 +1,41 @@
+{
+  "run_id": "dev_pr2_cube_v1_b04_seed1004",
+  "cohort": "development",
+  "status": "accepted_for_development_with_stage1_limitations",
+  "pairing": "PR2/cube_small",
+  "collector_commit": "f685efc00aa624f6e1a10507927ef810bc44d9f1",
+  "collector_sha256": "52c01e7e222620f7f8edbce9ec36d38cb41ffb7cb125da0dc22864420bc94cf8",
+  "completed_trials": 100,
+  "class_counts": {
+    "0": 63,
+    "1": 37
+  },
+  "candidate_status_counts": {
+    "completed": 100,
+    "rejected_initial_collision": 14
+  },
+  "outcomes": {
+    "insufficient_lift": 54,
+    "stable_hold": 37,
+    "lost_gripper_contact": 8,
+    "excessive_slip": 1
+  },
+  "exact_feature_duplicates": 0,
+  "exact_feature_overlap_with_prior_batches": 0,
+  "exact_feature_overlap_with_pilot": 0,
+  "wall_seconds": 3.858526958,
+  "audit_tests_passed": 4,
+  "hashes": {
+    "grasps.csv": "87887760ee7750f98e0303a68c5292c7747ddb10e5eac4c4346ec68a3dc15960",
+    "attempts.csv": "0118bbb9371ec66d902ac861001db1aaf429ebffbfe1f49aa2bcadff9d0b0717",
+    "config.json": "56b046972c2ab5127f5f2d0e6e924817272c3dc11cdbe8b24deb43c9acca182e",
+    "provenance.csv": "094d1bd66c771d20a03f3522bc9137c4cd8524d2d30eac198fce6c0a39aea1bf"
+  },
+  "limitations": [
+    "Only PR2/cube_small",
+    "Not balanced",
+    "Near-duplicate analysis deferred",
+    "No new visual review",
+    "Prediction-time feature contract unresolved"
+  ]
+}

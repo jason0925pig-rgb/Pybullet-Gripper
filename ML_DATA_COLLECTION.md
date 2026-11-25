@@ -10,7 +10,7 @@ pandas and PyBullet; pandas is already required by the coursework.
 From this repository:
 
 ```bash
-python version1_gripper --direct --samples 20 --seed 42 --output output/pr2_cube_demo
+python version1_gripper --direct --samples 20 --seed 42 --output output/pr2_cube_demo_recheck
 ```
 
 Omit `--direct` to inspect motions in the GUI. A GUI run deliberately sleeps

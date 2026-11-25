@@ -1,0 +1,33 @@
+{
+  "role": "independent_new_pose_simulation_test",
+  "seed": 9001,
+  "requested_samples": 10,
+  "max_attempts": 200,
+  "prediction_time": "after approach settling, before closure",
+  "execute_predicted_failures": true,
+  "candidate": "logistic_C_10",
+  "model_sha256": "36e5854f5171434dcfacc0cb468e4ba885f299d2356c956df6380078312a75b4",
+  "search_manifest_sha256": "17d43460bc63ae86adb5cd3f2d17e86390806c3591fb392b30b1b9815ca9799c",
+  "collector_sha256": "a49cb17f920a0cf460a2b1a89b695e04279309fb241763c635b6184348fec195",
+  "training_reference_config": {
+    "seed": 1001,
+    "dt": 0.004166666666666667,
+    "gripper": "pr2_gripper.urdf",
+    "object": "cube_small.urdf",
+    "r_min": 0.33,
+    "r_max": 0.6,
+    "lift_height": 0.27,
+    "hold_seconds": 3.1,
+    "min_lift": 0.1,
+    "slip_tolerance": 0.02,
+    "rotation_tolerance": 0.35,
+    "feature_frame": "gripper base COM relative to object base COM",
+    "measurement_time": "after approach settling, before finger closure",
+    "position_units": "meters",
+    "angle_units": "radians",
+    "euler_order": "roll,pitch,yaw",
+    "n_samples": 100,
+    "max_attempts": 2000
+  },
+  "config_note": "same physical/sampling/measurement/label defaults; new seed and count"
+}

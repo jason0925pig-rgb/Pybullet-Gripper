@@ -1,0 +1,84 @@
+{
+  "completed_requested_test": true,
+  "valid_test_attempts": 30,
+  "candidate_status_counts": {
+    "completed": 30,
+    "rejected_initial_collision": 6
+  },
+  "prediction_metrics": {
+    "accuracy": 0.6666666666666666,
+    "success_precision": 0.5625,
+    "success_recall": 0.75,
+    "success_f1": 0.6428571428571429,
+    "tn": 11,
+    "fp": 7,
+    "fn": 3,
+    "tp": 9
+  },
+  "metrics_by_candidate": {
+    "logistic_C_10": {
+      "accuracy": 0.6666666666666666,
+      "success_precision": 0.5625,
+      "success_recall": 0.75,
+      "success_f1": 0.6428571428571429,
+      "tn": 11,
+      "fp": 7,
+      "fn": 3,
+      "tp": 9
+    },
+    "forest_depth_2": {
+      "accuracy": 0.6,
+      "success_precision": 0.5,
+      "success_recall": 0.5833333333333334,
+      "success_f1": 0.5384615384615384,
+      "tn": 11,
+      "fp": 7,
+      "fn": 5,
+      "tp": 7
+    },
+    "sincos_forest_depth_2": {
+      "accuracy": 0.6333333333333333,
+      "success_precision": 0.5384615384615384,
+      "success_recall": 0.5833333333333334,
+      "success_f1": 0.56,
+      "tn": 12,
+      "fp": 6,
+      "fn": 5,
+      "tp": 7
+    }
+  },
+  "physical_grasp_success_rate": 0.4,
+  "exact_measured_feature_overlap_with_development_cohort": 0,
+  "fit_performed": false,
+  "threshold_or_parameters_changed": false,
+  "warning": "small test set; only PR2/cube and measured pre-closure prediction",
+  "source_hashes": {
+    "output/dev_pr2_cube_v1_manifest.json": "8ef16d7c800e89d29857a8dee044fbff8ffc7b80434360aa513569c09c7d7594",
+    "output/dev_pr2_cube_v1_b01_seed1001/collection_manifest.json": "6275726c04942b2a92c35c1a08a6713277e869cf6dbd7026c6ffe4768306b60c",
+    "output/dev_pr2_cube_v1_b01_seed1001/grasps.csv": "e927aefc5f74c241d6d3d98eaf78827e24fcf141b4a3d48ab6e92543aeb1062c",
+    "output/dev_pr2_cube_v1_b01_seed1001/attempts.csv": "616d3fb8589f00d062963fa65ef4688cd5cc3ead495569860ed2c006fea59a5d",
+    "output/dev_pr2_cube_v1_b01_seed1001/config.json": "a9aaad405334097dbb5be9ca309ec6cff0086d8704f2435aec8422518daeb308",
+    "output/dev_pr2_cube_v1_b01_seed1001/provenance.csv": "e9c9b58ea09ff04cb5c12b77eea40dde4cf97d95e43774bfb9c9317502704f75",
+    "output/dev_pr2_cube_v1_b02_seed1002/collection_manifest.json": "be578598a966fb789aef751bd8f072e0f6404bcc74a6093d18c4d74e6d8384ca",
+    "output/dev_pr2_cube_v1_b02_seed1002/grasps.csv": "3a7a044122e398df67a9b1baa622688a61d438edf746f6cc99d24b002394fc14",
+    "output/dev_pr2_cube_v1_b02_seed1002/attempts.csv": "21eccacbea6275d874fdb3f009ad942a4b3cff62230b9bc7d5343a2422ad2b07",
+    "output/dev_pr2_cube_v1_b02_seed1002/config.json": "27baa367f2b30859dd4b623764074a518cde5139e0f45061dee2ce40f1ffecd9",
+    "output/dev_pr2_cube_v1_b02_seed1002/provenance.csv": "fd1c73539fbc3da9f5bf109960d47e7e994b20712d3d5b80b7d2a4603edabb27",
+    "output/dev_pr2_cube_v1_b03_seed1003/collection_manifest.json": "1e83f685c599165e6f442e1af6871314d39168edbef8168e3d424d276d2f3bfc",
+    "output/dev_pr2_cube_v1_b03_seed1003/grasps.csv": "e07ad27df9b838923af74e875ea4e9f3ca16e4657d80292597f87d92c128c3de",
+    "output/dev_pr2_cube_v1_b03_seed1003/attempts.csv": "8dec9cf2f0baabcbdcb12a09d8a4e9c90b28b7eda89b91d9bedd9749222c90fe",
+    "output/dev_pr2_cube_v1_b03_seed1003/config.json": "7151a2219643b37339782ce2ec74e3ec7de7d805d16fbeac86570b94f9c1a9ce",
+    "output/dev_pr2_cube_v1_b03_seed1003/provenance.csv": "4ba0b0c7d06c60b8dad8efecc0a9574cc55a8409144c33cb3267934377ce62bd",
+    "output/dev_pr2_cube_v1_b04_seed1004/collection_manifest.json": "280e9cd4edb59d3d92c815353274870e613a037492756c70d30925ebf2dffd6a",
+    "output/dev_pr2_cube_v1_b04_seed1004/grasps.csv": "87887760ee7750f98e0303a68c5292c7747ddb10e5eac4c4346ec68a3dc15960",
+    "output/dev_pr2_cube_v1_b04_seed1004/attempts.csv": "0118bbb9371ec66d902ac861001db1aaf429ebffbfe1f49aa2bcadff9d0b0717",
+    "output/dev_pr2_cube_v1_b04_seed1004/config.json": "56b046972c2ab5127f5f2d0e6e924817272c3dc11cdbe8b24deb43c9acca182e",
+    "output/dev_pr2_cube_v1_b04_seed1004/provenance.csv": "094d1bd66c771d20a03f3522bc9137c4cd8524d2d30eac198fce6c0a39aea1bf"
+  },
+  "output_hashes": {
+    "test_protocol.json": "88e2201572f7b55aff2f5dbd820fbaf6f169bedfcf5c10ed524d26ebee98dfc0",
+    "attempts.csv": "e1910615afaf078c9096e62d476d85aa8d8499e657aa195ff258bebd159b2c3e",
+    "test_predictions.csv": "0d865d83b901e9f7b0cdc26a6c63d5c866dbb3b3b5a5f45d8c0913b9687bee12",
+    "events.jsonl": "9dee77e9252dd43ea73b45c3b964146484478c6993559874d49cf0e7d4436507"
+  }
+}
