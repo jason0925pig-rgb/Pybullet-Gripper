@@ -3,13 +3,20 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from sklearn.model_selection import RepeatedStratifiedKFold
 
-from diagnose_models import fixed_models, load_training
+from diagnose_models import (
+    BASELINE_RUN,
+    DEVELOPMENT_DATASET,
+    FROZEN_SEARCHES,
+    fixed_models,
+    load_training,
+)
 from train_baseline import ROOT, evaluate, sha256
 
 
@@ -69,13 +76,11 @@ def learning_curve_scores(X, y, provenance, repeats=5, sizes=(32, 64, 96, 128, N
     return scores, summary, pd.concat(membership, ignore_index=True)
 
 
-def run_learning_curves(output_dir):
-    searches = {"logistic_C_10": ROOT / "output/cv_pr2_cube_v1_seed42",
-                "tree_depth_3": ROOT / "output/cv_tree_pr2_cube_v1_seed42",
-                "forest_depth_2": ROOT / "output/cv_forest_pr2_cube_v1_seed42"}
+def run_learning_curves(output_dir: Union[str, Path]) -> pd.DataFrame:
+    """Write learning curves and the fold membership needed to reproduce them."""
     X, y, provenance, _, manifest, hashes = load_training(
-        ROOT / "output/dev_pr2_cube_v1_balanced240",
-        ROOT / "output/baseline_pr2_cube_v1_seed42", searches)
+        DEVELOPMENT_DATASET, BASELINE_RUN, FROZEN_SEARCHES
+    )
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
     scores, summary, membership = learning_curve_scores(X, y, provenance)

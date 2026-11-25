@@ -2,12 +2,13 @@
 
 import hashlib
 from pathlib import Path
+from typing import Union
 
 
 ROOT = Path(__file__).resolve().parent
 
 
-def artifact_key(path):
+def artifact_key(path: Union[str, Path]) -> str:
     """Keep external artifact paths absolute and repository paths portable."""
     resolved = Path(path).resolve()
     if resolved.is_relative_to(ROOT):
@@ -15,6 +16,6 @@ def artifact_key(path):
     return str(resolved)
 
 
-def sha256(path):
+def sha256(path: Union[str, Path]) -> str:
     """Hash an absolute path or a repository-relative artifact key."""
     return hashlib.sha256((ROOT / path).read_bytes()).hexdigest()

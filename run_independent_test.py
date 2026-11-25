@@ -4,21 +4,26 @@ import argparse
 import json
 import runpy
 from pathlib import Path
+from typing import Iterable, Union
 
 import joblib
 import numpy as np
 import pandas as pd
 import pybullet as p
 
-from prepare_dataset import load_cohort
 from artifact_paths import artifact_key
-from train_baseline import ROOT, FEATURE_COLUMNS, evaluate, sha256
+from prepare_dataset import load_cohort
+from train_baseline import FEATURE_COLUMNS, ROOT, evaluate, sha256
 
-PR2Hand = runpy.run_path(str(ROOT / "version1_gripper"))["PR2Hand"]
+COLLECTOR_PATH = ROOT / "version1_gripper"
+DEFAULT_SEARCH_DIR = ROOT / "output/cv_pr2_cube_v1_seed42"
+DEVELOPMENT_SEEDS = {42, 1001, 1002, 1003, 1004}
+PR2Hand = runpy.run_path(str(COLLECTOR_PATH))["PR2Hand"]
 
 
-def load_frozen_model(search_dir):
-    search_dir = Path(search_dir)
+def load_frozen_model(search_dir: Union[str, Path]) -> tuple[dict, dict[str, str]]:
+    """Load a local fitted model after verifying its artifacts and pose contract."""
+    search_dir = Path(search_dir).resolve()
     manifest_path = search_dir / "search_manifest.json"
     frozen = json.loads(manifest_path.read_text())
     model_path = search_dir / "selected_training_model.joblib"
@@ -33,6 +38,17 @@ def load_frozen_model(search_dir):
         raise ValueError("The model does not match the measured-pose test contract.")
     if bundle["candidate"] != frozen["selected_candidate"]:
         raise ValueError("The candidate differs from the frozen search.")
+    model = bundle["estimator"]
+    try:
+        labels = set(model.classes_)
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise ValueError("The frozen model must predict labels 0 and 1 and their probabilities.") from exc
+    if (
+        labels != {0, 1}
+        or not callable(getattr(model, "predict", None))
+        or not callable(getattr(model, "predict_proba", None))
+    ):
+        raise ValueError("The frozen model must predict labels 0 and 1 and their probabilities.")
     hashes = {artifact_key(manifest_path): sha256(manifest_path),
               artifact_key(model_path): frozen["output_hashes"][model_path.name]}
     # The serialized pipeline calls this module at inference time.
@@ -46,10 +62,39 @@ def load_frozen_model(search_dir):
     return bundle, hashes
 
 
-def run_test(output_dir, samples=10, seed=9001, max_attempts=200,
-             search_dir=ROOT / "output/cv_pr2_cube_v1_seed42", *, comparison_dirs=()):
+def _predict_models(
+    features: dict[str, float],
+    models: dict,
+    columns: dict[str, tuple[str, str]],
+) -> dict[str, Union[int, float]]:
+    """Predict one measured pose and keep the output column order stable."""
+    pose = pd.DataFrame([features], columns=FEATURE_COLUMNS)
+    if not np.isfinite(pose.to_numpy()).all():
+        raise ValueError("Measured test features are not finite.")
+    predictions = {}
+    for name, model in models.items():
+        prediction_column, probability_column = columns[name]
+        success_index = int(np.flatnonzero(model.classes_ == 1)[0])
+        predictions[prediction_column] = int(model.predict(pose)[0])
+        predictions[probability_column] = float(model.predict_proba(pose)[0, success_index])
+    return predictions
+
+
+def run_test(
+    output_dir: Union[str, Path],
+    samples: int = 10,
+    seed: int = 9001,
+    max_attempts: int = 200,
+    search_dir: Union[str, Path] = DEFAULT_SEARCH_DIR,
+    *,
+    comparison_dirs: Iterable[Union[str, Path]] = (),
+) -> tuple[pd.DataFrame, dict]:
+    """Execute sampled grasps and return paired predictions and test metrics."""
     if samples < 10 or max_attempts < samples:
         raise ValueError("At least ten valid tests and an adequate attempt limit are required.")
+    if seed in DEVELOPMENT_SEEDS:
+        raise ValueError("Use a new test seed, not a pilot or development seed.")
+    search_dir = Path(search_dir).resolve()
     bundle, model_hashes = load_frozen_model(search_dir)
     primary = bundle["candidate"]
     models = {primary: bundle["estimator"]}
@@ -64,8 +109,6 @@ def run_test(output_dir, samples=10, seed=9001, max_attempts=200,
                (f"{name}_prediction", f"{name}_success_probability") for name in models}
     source, source_hashes, _ = load_cohort(ROOT / "output/dev_pr2_cube_v1_manifest.json")
     reference_config = json.loads((ROOT / "output/dev_pr2_cube_v1_b01_seed1001/config.json").read_text())
-    if seed in {42, 1001, 1002, 1003, 1004}:
-        raise ValueError("Use a new test seed, not a pilot or development seed.")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
     protocol = {"role": "independent_new_pose_simulation_test", "seed": seed,
@@ -76,7 +119,7 @@ def run_test(output_dir, samples=10, seed=9001, max_attempts=200,
                 "search_manifest_sha256": model_hashes[artifact_key(Path(search_dir) / "search_manifest.json")],
                 "candidates": list(models), "prediction_columns": columns,
                 "frozen_model_artifact_hashes": model_hashes,
-                "collector_sha256": sha256(ROOT / "version1_gripper"),
+                "collector_sha256": sha256(COLLECTOR_PATH),
                 "training_reference_config": reference_config,
                 "config_note": "same physical/sampling/measurement/label defaults; new seed and count"}
     (output / "test_protocol.json").write_text(json.dumps(protocol, indent=2) + "\n")
@@ -98,16 +141,10 @@ def run_test(output_dir, samples=10, seed=9001, max_attempts=200,
                          "planned_yaw": float(yaw)}
                 pending = {}
 
-                def predict(features):
-                    X = pd.DataFrame([features], columns=FEATURE_COLUMNS)
-                    if not np.isfinite(X.to_numpy()).all():
-                        raise ValueError("Measured test features are not finite.")
+                def predict(features: dict[str, float]) -> None:
+                    predictions = _predict_models(features, models, columns)
                     pending.update(features)
-                    for name, model in models.items():
-                        prediction_column, probability_column = columns[name]
-                        pending[prediction_column] = int(model.predict(X)[0])
-                        index = int(np.flatnonzero(model.classes_ == 1)[0])
-                        pending[probability_column] = float(model.predict_proba(X)[0, index])
+                    pending.update(predictions)
                     # This line is flushed before run_trial issues its first close command.
                     log({"event": "prediction_before_closure", "attempt_id": attempt_id, **pending})
 
@@ -171,7 +208,7 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, default=ROOT / "output/independent_pr2_cube_v1_seed9001")
     parser.add_argument("--samples", type=int, default=10)
     parser.add_argument("--seed", type=int, default=9001)
-    parser.add_argument("--search", type=Path, default=ROOT / "output/cv_pr2_cube_v1_seed42")
+    parser.add_argument("--search", type=Path, default=DEFAULT_SEARCH_DIR)
     parser.add_argument("--compare", type=Path, action="append", default=[])
     args = parser.parse_args()
     run_test(args.output, args.samples, args.seed, search_dir=args.search, comparison_dirs=args.compare)

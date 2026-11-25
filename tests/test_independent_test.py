@@ -80,6 +80,19 @@ class IndependentTestChecks(unittest.TestCase):
                 independent.run_test(Path(directory) / "test", seed=1001)
             self.assertFalse((Path(directory) / "test").exists())
 
+    def test_unfitted_frozen_model_fails_before_simulation(self):
+        bundle, _ = independent.load_frozen_model(independent.DEFAULT_SEARCH_DIR)
+        bundle["estimator"] = Pipeline([])
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "test"
+            with patch.object(independent.joblib, "load", return_value=bundle), patch.object(
+                independent, "PR2Hand"
+            ) as hand:
+                with self.assertRaisesRegex(ValueError, "must predict labels 0 and 1"):
+                    independent.run_test(output, seed=7777)
+            hand.assert_not_called()
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

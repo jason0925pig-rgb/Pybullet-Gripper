@@ -3,16 +3,26 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from sklearn.model_selection import RepeatedStratifiedKFold
 
-from prepare_dataset import pose_groups
 from artifact_paths import artifact_key
-from train_baseline import ROOT, FEATURE_COLUMNS, evaluate, load_development, sha256
+from prepare_dataset import pose_groups
+from train_baseline import FEATURE_COLUMNS, ROOT, evaluate, load_development, sha256
 from tune_models import candidates
+
+
+DEVELOPMENT_DATASET = ROOT / "output/dev_pr2_cube_v1_balanced240"
+BASELINE_RUN = ROOT / "output/baseline_pr2_cube_v1_seed42"
+FROZEN_SEARCHES = {
+    "logistic_C_10": ROOT / "output/cv_pr2_cube_v1_seed42",
+    "tree_depth_3": ROOT / "output/cv_tree_pr2_cube_v1_seed42",
+    "forest_depth_2": ROOT / "output/cv_forest_pr2_cube_v1_seed42",
+}
 
 
 def fixed_models():
@@ -23,8 +33,8 @@ def fixed_models():
             "forest_depth_2": candidates(42, "random_forest")["forest_depth_2"]}
 
 
-def checked_manifest(folder, filename, fingerprints):
-    """Verify all recorded input/output artifacts before using an experiment."""
+def checked_manifest(folder: Union[str, Path], filename: str, fingerprints: dict) -> dict:
+    """Verify manifest artifacts and add their hashes to the supplied dict."""
     path = Path(folder) / filename
     metadata = json.loads(path.read_text())
     expected = dict(metadata["source_hashes"])
@@ -136,13 +146,11 @@ def error_tables(wide):
     return pd.DataFrame(batch_rows), pd.DataFrame(feature_rows)
 
 
-def run_diagnostics(output_dir, repeats=5):
-    searches = {"logistic_C_10": ROOT / "output/cv_pr2_cube_v1_seed42",
-                "tree_depth_3": ROOT / "output/cv_tree_pr2_cube_v1_seed42",
-                "forest_depth_2": ROOT / "output/cv_forest_pr2_cube_v1_seed42"}
+def run_diagnostics(output_dir: Union[str, Path], repeats: int = 5) -> pd.DataFrame:
+    """Write diagnostics for the frozen training split to a fresh directory."""
     X, y, provenance, wide, manifest, hashes = load_training(
-        ROOT / "output/dev_pr2_cube_v1_balanced240",
-        ROOT / "output/baseline_pr2_cube_v1_seed42", searches)
+        DEVELOPMENT_DATASET, BASELINE_RUN, FROZEN_SEARCHES
+    )
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
     wide.to_csv(output / "original_oof_error_analysis.csv", index=False)

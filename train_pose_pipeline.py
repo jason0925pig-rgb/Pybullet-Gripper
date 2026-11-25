@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Union
 
 import joblib
 import numpy as np
@@ -12,14 +13,21 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer
 
 from compare_pose_features import encode_angles
-from diagnose_models import checked_manifest, fixed_models, load_training
+from diagnose_models import (
+    BASELINE_RUN,
+    DEVELOPMENT_DATASET,
+    FROZEN_SEARCHES,
+    checked_manifest,
+    fixed_models,
+    load_training,
+)
 from train_baseline import FEATURE_COLUMNS, ROOT, sha256
 
 
 CANDIDATE = "sincos_forest_depth_2"
 
 
-def make_pose_pipeline():
+def make_pose_pipeline() -> Pipeline:
     """Accept six raw pose columns and transform them inside the saved model."""
     return Pipeline([
         ("pose_encoding", FunctionTransformer(encode_angles, validate=False)),
@@ -27,14 +35,11 @@ def make_pose_pipeline():
     ])
 
 
-def train_pipeline(output_dir):
+def train_pipeline(output_dir: Union[str, Path]) -> Pipeline:
     """Refit the frozen representation/model choice on the original training rows."""
-    searches = {"logistic_C_10": ROOT / "output/cv_pr2_cube_v1_seed42",
-                "tree_depth_3": ROOT / "output/cv_tree_pr2_cube_v1_seed42",
-                "forest_depth_2": ROOT / "output/cv_forest_pr2_cube_v1_seed42"}
     X, y, provenance, _, dataset, hashes = load_training(
-        ROOT / "output/dev_pr2_cube_v1_balanced240",
-        ROOT / "output/baseline_pr2_cube_v1_seed42", searches)
+        DEVELOPMENT_DATASET, BASELINE_RUN, FROZEN_SEARCHES
+    )
     experiment_dir = ROOT / "output/feature_ablation_pr2_cube_v1"
     checked_manifest(experiment_dir, "feature_experiment_manifest.json", hashes)
     summary = pd.read_csv(experiment_dir / "representation_summary.csv")
@@ -43,15 +48,18 @@ def train_pipeline(output_dir):
         raise ValueError("Recorded feature experiment does not select the frozen pipeline.")
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=False)
+    training_rows = len(X)
+    validation_rows = dataset["selected_rows"] - training_rows
     protocol = {
         "selected_candidate": CANDIDATE,
         "selection_basis": "highest mean repeated-CV accuracy across the six recorded representation/model combinations",
         "selected_mean_cv_accuracy": float(selected.mean_accuracy),
-        "training_rows": len(X), "excluded_outer_validation_rows": 48,
+        "training_rows": training_rows,
+        "excluded_outer_validation_rows": validation_rows,
         "outer_validation_evaluated": False, "independent_test_performed": False,
         "input_columns": FEATURE_COLUMNS, "internal_columns": list(encode_angles(X).columns),
         "classifier_parameters": fixed_models()["forest_depth_2"].get_params(),
-        "refit_scope": "original 192 training rows only",
+        "refit_scope": f"original {training_rows} training rows only",
         "warning": "Feature/model selection reuses development data; CV score is not an independent final performance estimate.",
     }
     # Write the frozen protocol before fitting or any later outer evaluation.
@@ -85,7 +93,7 @@ def train_pipeline(output_dir):
                 "output_hashes": {p.name: sha256(p) for p in output.iterdir() if p.is_file()}}
     (output / "search_manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")
     print(f"Saved frozen pipeline: {CANDIDATE}")
-    print(f"Training rows: {len(X)}; outer validation rows excluded: 48")
+    print(f"Training rows: {training_rows}, outer validation rows excluded: {validation_rows}")
     print("Six raw pose inputs -> nine sine/cosine features -> fixed random forest")
     print("Save/reload and manual-encoding prediction equivalence verified.")
     return model
